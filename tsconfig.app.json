@@ -16,12 +16,18 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Strictness - Recommended for MAI Projects */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
     /* Fixes for Vite/React */
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"], 
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "api", "vite.config.ts"] 
 }

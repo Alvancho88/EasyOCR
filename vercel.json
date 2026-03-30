@@ -1,10 +1,22 @@
 {
-  "rewrite": [
-    { "source": "/(.*)", "destination": "/api/app" }
-  ],
-  "functions": {
-    "api/app.py": {
-      "runtime": "vercel-python@0.0.6"
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build"
+    },
+    {
+      "src": "api/app.py",
+      "use": "@vercel/python"
     }
-  }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "api/app.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

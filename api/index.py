@@ -8,68 +8,57 @@ from cerebras.cloud.sdk import Cerebras
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Load environment variables robustly
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
+# Cloud-safe dotenv loading
+env_file = Path(__file__).parent / ".env"
+if env_file.exists():
+    load_dotenv(dotenv_path=env_file)
 
 app = Flask(__name__)
-# Enable CORS so your React frontend can call this api/index.py function
 CORS(app)
 
-# Initialize Clients
-groq_client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=os.getenv("GROQ_API_KEY")
-)
-
-cerebras_client = Cerebras(
-    api_key=os.getenv("CEREBRAS_API_KEY")
-)
+groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=os.getenv("GROQ_API_KEY"))
+cerebras_client = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+        file = request.files.get('file')
+        if not file:
+            return jsonify({"error": "No file"}), 400
             
-        file = request.files['file']
         image_base64 = base64.b64encode(file.read()).decode('utf-8')
 
-        # STAGE 1: OCR with Groq Llama 4 Scout
-        ocr_response = groq_client.chat.completions.create(
+        # STAGE 1: OCR
+        ocr_res = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Extract all food items and their prices exactly as shown."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                ]
-            }]
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": "List every food item and price found in this image."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ]}]
         )
-        extracted_text = ocr_response.choices[0].message.content
+        text_data = ocr_res.choices[0].message.content
 
-        # STAGE 2: Reasoning with Cerebras Llama 3.1 8B
-        analysis_response = cerebras_client.chat.completions.create(
+        # STAGE 2: Analysis (More strict prompt to avoid price/calorie confusion)
+        analysis_res = cerebras_client.chat.completions.create(
             model="llama3.1-8b", 
             messages=[
-                {"role": "system", "content": "Return ONLY a JSON array of objects: {'f': 'food', 'c': calories, 'ft': fat, 'gi': 'Low/Med/High'}"},
-                {"role": "user", "content": f"Analyze this menu text: {extracted_text}"}
+                {"role": "system", "content": "You are a nutrition expert. Convert the menu text into a JSON array. DO NOT use prices as calories. Estimate calories based on the dish name. Format: {'f': 'dish', 'c': kcal_estimate, 'ft': fat_g, 'gi': 'Low/Med/High'}"},
+                {"role": "user", "content": text_data}
             ]
         )
         
-        # Clean JSON markdown blocks
-        content = analysis_response.choices[0].message.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
+        # Robust JSON extraction
+        raw_content = analysis_res.choices[0].message.content
+        json_start = raw_content.find('[')
+        json_end = raw_content.rfind(']') + 1
+        clean_json = raw_content[json_start:json_end]
         
-        # Return structured data to the React frontend
-        return jsonify(json.loads(content))
+        return jsonify(json.loads(clean_json))
 
     except Exception as e:
-        return jsonify({"error": "Failed to process image", "details": str(e)}), 500
+        # This will show up in your Vercel logs so we can see exactly what failed
+        print(f"CRITICAL ERROR: {str(e)}")
+        return jsonify({"error": "Processing failed", "details": str(e)}), 500
 
-#No need for Vercel
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

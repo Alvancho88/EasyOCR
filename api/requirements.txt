@@ -1,7 +1,21 @@
+# flask
+# flask-cors
+# opencv-python-headless
+# numpy
+# easyocr
+# python-dotenv
+# openai
+
+# flask
+# flask-cors
+# openai
+# cerebras_cloud_sdk
+# python-dotenv
+# gunicorn
+
+# Vercel
 flask
 flask-cors
-opencv-python-headless
-numpy
-easyocr
-python-dotenv
 openai
+cerebras_cloud_sdk
+python-dotenv
